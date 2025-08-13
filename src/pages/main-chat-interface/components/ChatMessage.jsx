@@ -1,20 +1,17 @@
-import React, { useState } from 'react';
-import Icon from '../../../components/AppIcon';
-import Button from '../../../components/ui/Button';
+import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Button } from '../../../components/ui/Button';
+import { Download, FileText, FileUp, Copy, RefreshCw, GitBranch } from 'lucide-react';
 
-const ChatMessage = ({ message, onBranch, onCopy, onRegenerate }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [showActions, setShowActions] = useState(false);
-
-  const formatTimestamp = (timestamp) => {
-    return timestamp.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
-
+const ChatMessage = ({ 
+  message, 
+  onBranch, 
+  onCopy, 
+  onMessageRegenerate,
+  onCreatePDF,
+  onCreateWord
+}) => {
   const getModelBadgeColor = (model) => {
     const colors = {
       'aria-gemma3-1b:latest': 'bg-blue-100 text-blue-800',
@@ -24,7 +21,9 @@ const ChatMessage = ({ message, onBranch, onCopy, onRegenerate }) => {
       'DeepSeek': 'bg-green-100 text-green-800',
       'Mythomax': 'bg-purple-100 text-purple-800',
       'DeepSeek R1': 'bg-orange-100 text-orange-800',
-      'Dark Champion': 'bg-red-100 text-red-800'
+      'Dark Champion': 'bg-red-100 text-red-800',
+      'system': 'bg-gray-100 text-gray-800',
+      'error': 'bg-red-100 text-red-800'
     };
     return colors[model] || 'bg-gray-100 text-gray-800';
   };
@@ -76,130 +75,165 @@ const ChatMessage = ({ message, onBranch, onCopy, onRegenerate }) => {
     );
   };
 
+  const renderFileExportButtons = () => {
+    if (!message.isFileOffer || !message.originalContent) return null;
+
+    return (
+      <div className="mt-4 p-3 bg-muted rounded-lg border border-border">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-text-primary">Export Response</span>
+        </div>
+        <div className="flex space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onCreatePDF(message.originalContent, `aria_response_${Date.now()}.pdf`)}
+            className="flex items-center space-x-2"
+          >
+            <FileText size={16} />
+            <span>PDF</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onCreateWord(message.originalContent, `aria_response_${Date.now()}.docx`)}
+            className="flex items-center space-x-2"
+          >
+            <FileText size={16} />
+            <span>Word</span>
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderFileUploadInfo = () => {
+    if (!message.isFileUpload) return null;
+
+    return (
+      <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="flex items-center space-x-2 text-blue-800">
+          <FileUp size={16} />
+          <span className="text-sm font-medium">File uploaded: {message.fileName}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderSearchIndicator = () => {
+    if (!message.usedSearch) return null;
+
+    return (
+      <div className="inline-flex items-center space-x-1 px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium ml-2">
+        <span>🔍</span>
+        <span>Web Search</span>
+      </div>
+    );
+  };
+
+  const renderDeepThinkIndicator = () => {
+    if (!message.deepThink) return null;
+
+    return (
+      <div className="inline-flex items-center space-x-1 px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium ml-2">
+        <span>🧠</span>
+        <span>Deep Think</span>
+      </div>
+    );
+  };
+
   return (
-    <div 
-      className={`group mb-6 ${message.sender === 'user' ? 'ml-12' : 'mr-12'}`}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
-    >
-      <div className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-        <div className={`max-w-full ${message.sender === 'user' ? 'order-2' : 'order-1'}`}>
-          {/* Message Header */}
-          <div className={`flex items-center mb-2 ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className="flex items-center space-x-2">
-              {message.sender !== 'user' && message.model && (
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getModelBadgeColor(message.model)}`}>
-                  {message.model}
-                </span>
-              )}
-              <span className="text-xs text-text-secondary">
-                {formatTimestamp(message.timestamp)}
-              </span>
-              {message.temperature && (
-                <span className="text-xs text-text-secondary">
-                  T: {message.temperature}
-                </span>
-              )}
-            </div>
-          </div>
+    <div className="flex space-x-3">
+      {/* Avatar */}
+      <div className="flex-shrink-0">
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+          message.sender === 'user' 
+            ? 'bg-primary text-primary-foreground' 
+            : 'bg-muted text-text-secondary'
+        }`}>
+          {message.sender === 'user' ? 'U' : 'A'}
+        </div>
+      </div>
 
-          {/* Message Bubble */}
-          <div className={`relative p-5 rounded-2xl shadow-soft ${
-            message.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-surface border border-border'
+      {/* Message Content */}
+      <div className="flex-1 min-w-0">
+        {/* Message Header */}
+        <div className="flex items-center space-x-2 mb-2">
+          <span className={`text-sm font-medium ${
+            message.sender === 'user' ? 'text-primary' : 'text-text-primary'
           }`}>
-            {/* Message Content */}
-            <div className={`text-[15px] leading-7 ${
-              message.sender === 'user' ? 'text-primary-foreground' : 'text-text-primary'
-            }`}>
-              {renderMessageContent(message.content)}
-            </div>
+            {message.sender === 'user' ? 'You' : 'Aria'}
+          </span>
+          
+          {message.model && message.model !== 'system' && message.model !== 'error' && (
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getModelBadgeColor(message.model)}`}>
+              {message.model}
+            </span>
+          )}
+          
+          {renderSearchIndicator()}
+          {renderDeepThinkIndicator()}
+          
+          <span className="text-xs text-text-secondary">
+            {message.timestamp.toLocaleTimeString()}
+          </span>
+        </div>
 
-            {/* Attachments */}
-            {message.attachments && message.attachments.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {message.attachments.map((attachment, index) => (
-                  <div key={index} className="flex items-center space-x-2 p-2 bg-muted/50 rounded-lg">
-                    <Icon name="Paperclip" size={14} />
-                    <span className="text-xs">{attachment.name}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Council Responses (for Deep Think mode) */}
-            {message.councilResponses && (
-              <div className="mt-4">
-                <button
-                  onClick={() => setIsExpanded(!isExpanded)}
-                  className="flex items-center space-x-2 text-xs text-text-secondary hover:text-text-primary transition-colors duration-150"
-                >
-                  <Icon name={isExpanded ? "ChevronUp" : "ChevronDown"} size={14} />
-                  <span>Council Deliberation ({message.councilResponses.length})</span>
-                </button>
-                
-                {isExpanded && (
-                  <div className="mt-3 space-y-3">
-                    {message.councilResponses.map((response, index) => (
-                      <div key={index} className="p-3 bg-muted/30 rounded-lg border-l-2 border-primary/20">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className={`text-xs font-medium px-2 py-1 rounded-full ${getModelBadgeColor(response.model)}`}>
-                            {response.model}
-                          </span>
-                          <span className="text-xs text-text-secondary">
-                            {response.reasoning}
-                          </span>
-                        </div>
-                        <p className="text-sm text-text-primary">
-                          {response.content}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+        {/* Message Bubble */}
+        <div className={`relative p-5 rounded-2xl shadow-soft ${
+          message.sender === 'user' 
+            ? 'bg-primary text-primary-foreground' 
+            : 'bg-surface border border-border'
+        }`}>
+          {/* Message Content */}
+          <div className={`text-[15px] leading-7 ${
+            message.sender === 'user' ? 'text-primary-foreground' : 'text-text-primary'
+          }`}>
+            {renderMessageContent(message.content)}
           </div>
 
-          {/* Message Actions */}
-          {showActions && message.sender !== 'user' && (
-            <div className="flex items-center space-x-1 mt-2">
+          {/* File Export Buttons */}
+          {renderFileExportButtons()}
+
+          {/* File Upload Info */}
+          {renderFileUploadInfo()}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center space-x-2 mt-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onCopy(message.content)}
+            className="text-text-secondary hover:text-text-primary"
+          >
+            <Copy size={14} />
+            <span className="ml-1">Copy</span>
+          </Button>
+          
+          {message.sender === 'assistant' && (
+            <>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => onCopy(message.content)}
-                iconName="Copy"
-                iconSize={14}
-                className="p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-              />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onRegenerate(message.id)}
-                iconName="RotateCcw"
-                iconSize={14}
-                className="p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-              />
+                onClick={() => onMessageRegenerate(message.id)}
+                className="text-text-secondary hover:text-text-primary"
+              >
+                <RefreshCw size={14} />
+                <span className="ml-1">Regenerate</span>
+              </Button>
+              
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => onBranch(message.id)}
-                iconName="GitBranch"
-                iconSize={14}
-                className="p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-              />
-            </div>
+                className="text-text-secondary hover:text-text-primary"
+              >
+                <GitBranch size={14} />
+                <span className="ml-1">Branch</span>
+              </Button>
+            </>
           )}
-        </div>
-
-        {/* Avatar */}
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-          message.sender === 'user' ? 'order-1 ml-3 bg-primary' : 'order-2 mr-3 bg-muted'
-        }`}>
-          <Icon 
-            name={message.sender === 'user' ? "User" : "Bot"} 
-            size={16} 
-            className={message.sender === 'user' ? 'text-primary-foreground' : 'text-text-secondary'}
-          />
         </div>
       </div>
     </div>
